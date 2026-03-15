@@ -73,7 +73,13 @@ def get_few_shot_db_chain():
         input_variables=["input", "table_info", "top_k"] #These variables are used in the prefix and suffix
     )
 
-    chain = SQLDatabaseChain.from_llm(llm, db, verbose=True, prompt=few_shot_prompt)
+    chain = SQLDatabaseChain.from_llm(
+        llm,
+        db, 
+        verbose=True, 
+        prompt=few_shot_prompt,
+        return_intermediate_steps=True
+        )
     
 
     return chain
