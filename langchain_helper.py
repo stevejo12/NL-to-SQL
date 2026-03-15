@@ -20,7 +20,8 @@ def get_few_shot_db_chain():
     )
 
 
-    db_user = "root"
+    # db_user = "root"
+    db_user = "atliq_user"
     db_password = quote_plus("Jay@9707")  # safely encodes special characters
     db_host = "localhost"
     db_name = "atliq_tshirts"
