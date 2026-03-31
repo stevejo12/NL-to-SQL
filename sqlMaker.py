@@ -1,6 +1,13 @@
 import os
 import pandas as pd
 
+#Todo: double column logic (detection and columns to drop),
+#  create region type column, 
+# dates to keep, 
+# logic for isced11 column, 
+# automatic database creation
+
+
 # Configuration
 data_folder = 'Data'
 output_sql_file = 'db_creation_eurostat.sql'
@@ -8,6 +15,17 @@ database_name = 'eurostat_econ'
 
 TARGET_COL = 'geo: Geopolitical entity (reporting)'
 
+columns_to_drop = [
+    'STRUCTURE', 
+    'STRUCTURE_ID',
+    'STRUCTURE_NAME', 
+    'freq',
+    'Time frequency', 
+    'CONF_STATUS',
+    'Confidentiality status (flag)',
+    'OBS_FLAG',
+    'Observation status (Flag) V2 structure',
+                   ]
 def generate_sql():
     sql_statements = [f"CREATE DATABASE IF NOT EXISTS {database_name};\n", f"USE {database_name};\n"]
     
