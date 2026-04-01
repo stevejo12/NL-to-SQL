@@ -40,13 +40,24 @@ geo_mapping = {
     5: "NUTS 3"
 }
 
+TABLE_NAMES = {
+    "GDP_at_current_market_prices_by_NUTS_2_region.csv": "GDP",
+    "GERD_by_sector_of_performance_and_NUTS_2_region.csv": "GERD",
+    "Employed_persons_by_NUTS_2_region.csv": "Employed",
+    "Unemployed_persons_by_educational_attainment_level_and_NUTS_2_region.csv": "Unemployed",
+    "Employed_persons_by_educational_attainment_level_and_NUTS_2_region.csv": "Employed_by_Education",
+    "Population_in_private_households_by_educational_attainment_level_and_NUTS_2_region.csv": "Population_by_Education",
+}
+
 def generate_sql():
     sql_statements = [f"CREATE DATABASE IF NOT EXISTS {database_name};\n", f"USE {database_name};\n"]
     
     # Iterate through all CSV files in the folder
     for filename in os.listdir(data_folder):
         if filename.endswith('.csv'):
-            table_name = os.path.splitext(filename)[0]
+            # table_name = os.path.splitext(filename)[0]
+            # file_path = os.path.join(data_folder, filename)
+            table_name = TABLE_NAMES.get(filename, os.path.splitext(filename)[0])
             file_path = os.path.join(data_folder, filename)
             
             # Use pandas to infer data types
@@ -98,10 +109,12 @@ def generate_sql():
             for col in original_columns:
                 if col in columns_to_drop:
                     name = '@dummy'
-                    load_columns.append(f"`{name}`")
+                    load_columns.append(f"{name}")
                 elif col in cols_to_split_s:
                     clean_var = col.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')
-                    name = f"'@messy_{clean_var}'"
+                    if col == SPECIAL_COLUMN_A:
+                        clean_var = "isced11"
+                    name = f"@messy_{clean_var}"
                     load_columns.append(name)
                 else:
                     load_columns.append(f"`{col}`")
@@ -114,61 +127,79 @@ def generate_sql():
                 f"LINES TERMINATED BY '\\n'\n"
                 f"IGNORE 1 ROWS\n"
                 f"({', '.join(load_columns)})\n"
-                f"\nSET \n"
+                # f"\nSET \n"
             )
 
             # Add the SET logic if the target column was found
-            add_set = False
+            # add_set = False
+            # if SPECIAL_COLUMN_B in original_columns:
+            #     load_stmt += (
+            #         # "\nSET \n"
+            #         "    `geo` = SUBSTRING_INDEX(@messy_geo, ': ', 1),\n"
+            #         "    `geopolitical_entity` = SUBSTRING_INDEX(@messy_geo, ': ', -1),\n"
+            #     )
+            #     cols_to_split_s.remove(SPECIAL_COLUMN_B)
+            #     add_set = True
+            # if SPECIAL_COLUMN_A in original_columns:
+            #     source_name = f"@messy_{SPECIAL_COLUMN_A.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')}"
+            #     load_stmt += (
+            #         # "\nSET \n"
+            #         # f"    `geo` = SUBSTRING_INDEX({name}, ': ', 1),\n"
+            #         f"    `International Standard Classification of Education (ISCED 2011)` = SUBSTRING_INDEX({source_name}, ': ', -1),\n"
+            #     )
+            #     cols_to_split_s.remove(SPECIAL_COLUMN_A)
+            #     add_set = True
+            # if any((matched_col := col) in original_columns for col in cols_to_split_s):
+            #     source_name = f"@messy_{matched_col.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')}"
+            #     dest_name = matched_col.split(': ')[0]
+            #     load_stmt += (
+            #         # "\nSET \n"
+            #         f"    `{dest_name}` = SUBSTRING_INDEX({source_name}, ': ', 1),\n"
+            #         # f"    `geopolitical_entity` = SUBSTRING_INDEX({name}, ': ', -1);"
+            #     )
+            #     cols_to_split_s.remove(matched_col)
+            #     add_set = True
+            set_assignments = []
             if SPECIAL_COLUMN_B in original_columns:
-                load_stmt += (
-                    # "\nSET \n"
-                    "    `geo` = SUBSTRING_INDEX(@messy_geo, ': ', 1),\n"
-                    "    `geopolitical_entity` = SUBSTRING_INDEX(@messy_geo, ': ', -1),\n"
-                )
+                set_assignments.append("    `geo` = SUBSTRING_INDEX(@messy_geo, ': ', 1)")
+                set_assignments.append("    `Geopolitical entity (reporting)` = SUBSTRING_INDEX(@messy_geo, ': ', -1)")
                 cols_to_split_s.remove(SPECIAL_COLUMN_B)
-                add_set = True
             if SPECIAL_COLUMN_A in original_columns:
-                source_name = f"@messy_{SPECIAL_COLUMN_A.replace(' ', '_')}"
-                load_stmt += (
-                    # "\nSET \n"
-                    # f"    `geo` = SUBSTRING_INDEX({name}, ': ', 1),\n"
-                    f"    `International Standard Classification of Education (ISCED 2011)` = SUBSTRING_INDEX({source_name}, ': ', -1),\n"
-                )
+                set_assignments.append("    `International Standard Classification of Education (ISCED 2011)` = SUBSTRING_INDEX(@messy_isced11, ': ', -1)")
                 cols_to_split_s.remove(SPECIAL_COLUMN_A)
-                add_set = True
-            if any((matched_col := col) in original_columns for col in cols_to_split_s):
-                source_name = f"@messy_{matched_col.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')}"
-                dest_name = matched_col.split(': ')[0]
-                load_stmt += (
-                    # "\nSET \n"
-                    f"    `{dest_name}` = SUBSTRING_INDEX({source_name}, ': ', 1),\n"
-                    # f"    `geopolitical_entity` = SUBSTRING_INDEX({name}, ': ', -1);"
-                )
-                cols_to_split_s.remove(matched_col)
-                add_set = True
+
+            if set_assignments:
+                load_stmt += "\nSET\n" + ",\n".join(set_assignments)
+            for col in list(cols_to_split_s):
+              if col in original_columns:
+                clean_var = col.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')
+                source_name = f"@messy_{clean_var}"
+                dest_name = col.split(': ')[0]
+                load_stmt += f"    `{dest_name}` = SUBSTRING_INDEX({source_name}, ': ', 1),\n"
+                #temp_load_stmt
             
-            if not add_set:
-                load_stmt += (
-                    "    `region_type` = CASE \n"
-                    "        WHEN CHAR_LENGTH(`geo`) = 2 THEN 'Country'\n"
-                    "        WHEN CHAR_LENGTH(`geo`) = 3 THEN 'NUTS 1'\n"
-                    "        WHEN CHAR_LENGTH(`geo`) = 4 THEN 'NUTS 2'\n"
-                    "        WHEN CHAR_LENGTH(`geo`) = 5 THEN 'NUTS 3'\n"
-                    "        ELSE 'Other'\n"
-                    "    END,\n"
-                )
-                load_stmt += ";\n"
-            else:
-                load_stmt += (
-                    "    `region_type` = CASE \n"
-                    "        WHEN CHAR_LENGTH(`geo`) = 2 THEN 'Country'\n"
-                    "        WHEN CHAR_LENGTH(`geo`) = 3 THEN 'NUTS 1'\n"
-                    "        WHEN CHAR_LENGTH(`geo`) = 4 THEN 'NUTS 2'\n"
-                    "        WHEN CHAR_LENGTH(`geo`) = 5 THEN 'NUTS 3'\n"
-                    "        ELSE 'Other'\n"
-                    "    END,\n"
-                )
-                load_stmt += ";\n"
+            # if not add_set:
+            #     load_stmt += (
+            #         "    `region_type` = CASE \n"
+            #         "        WHEN CHAR_LENGTH(`geo`) = 2 THEN 'Country'\n"
+            #         "        WHEN CHAR_LENGTH(`geo`) = 3 THEN 'NUTS 1'\n"
+            #         "        WHEN CHAR_LENGTH(`geo`) = 4 THEN 'NUTS 2'\n"
+            #         "        WHEN CHAR_LENGTH(`geo`) = 5 THEN 'NUTS 3'\n"
+            #         "        ELSE 'Other'\n"
+            #         "    END,\n"
+            #     )
+            #     load_stmt += ";\n"
+            # else:
+            #     load_stmt += (
+            #         "    `region_type` = CASE \n"
+            #         "        WHEN CHAR_LENGTH(`geo`) = 2 THEN 'Country'\n"
+            #         "        WHEN CHAR_LENGTH(`geo`) = 3 THEN 'NUTS 1'\n"
+            #         "        WHEN CHAR_LENGTH(`geo`) = 4 THEN 'NUTS 2'\n"
+            #         "        WHEN CHAR_LENGTH(`geo`) = 5 THEN 'NUTS 3'\n"
+            #         "        ELSE 'Other'\n"
+            #         "    END,\n"
+            #     )
+            load_stmt += ";\n"
             sql_statements.append(load_stmt)
             print(f"Processed: {filename}")
 
