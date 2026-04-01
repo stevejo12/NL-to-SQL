@@ -19,12 +19,12 @@ def get_few_shot_db_chain():
         temperature=0.2
     )
 
-
+    load_dotenv()
     # db_user = "root"
-    db_user = "atliq_user"
-    db_password = quote_plus("Jay@9707")  # safely encodes special characters
-    db_host = "localhost"
-    db_name = "atliq_tshirts"
+    db_user = os.getenv("DATABASE_USER")
+    db_password = os.getenv("DATABASE_PASSWORD")  # safely encodes special characters
+    db_host = os.getenv("DATABASE_HOST")
+    db_name = os.getenv("DATABASE_NAME")
 
     db = SQLDatabase.from_uri(f"mysql+pymysql://{db_user}:{db_password}@{db_host}/{db_name}",
                             sample_rows_in_table_info=3)
