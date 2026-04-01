@@ -49,7 +49,7 @@ TABLE_NAMES = {
     "Population_in_private_households_by_educational_attainment_level_and_NUTS_2_region.csv": "Population_by_Education",
 }
 
-def generate_sql():
+def generate_sql() -> bool:
     sql_statements = [f"CREATE DATABASE IF NOT EXISTS {database_name};\n", f"USE {database_name};\n"]
     
     # Iterate through all CSV files in the folder
@@ -65,7 +65,8 @@ def generate_sql():
             original_columns = df_headers.columns.to_list()
             ##Split all columns with ': ' in the header, and remove the 2nd of those two columns, 
             ##unless certain rules apply. 
-            cols_to_split_s = {col for col in original_columns if ': ' in col}
+            refined_cols = df_headers.drop(columns_to_drop, axis=1, errors='ignore').columns.to_list()
+            cols_to_split_s = {col for col in refined_cols if ': ' in col}
             for col in original_columns:
                 if col in cols_to_split_s:
                     name1, name2 = col.split(': ')
@@ -88,7 +89,7 @@ def generate_sql():
             for col_name, dtype in df_headers.dtypes.items():
                 # Map pandas types to MySQL types
                     if col_name == 'geo':
-                        sql_type = "VARCHAR(10) PRIMARY KEY"
+                        sql_type = "VARCHAR(10)"
                     elif "int" in str(dtype):
                         sql_type = "INT"
                     elif "float" in str(dtype):
@@ -120,7 +121,7 @@ def generate_sql():
                     load_columns.append(f"`{col}`")
 
             load_stmt = (
-                f"LOAD DATA LOCAL INFILE '/var/lib/mysql-files/{os.path.basename(file_path)}'\n"
+                f"LOAD DATA LOCAL INFILE '{data_folder}/{os.path.basename(file_path)}'\n"
                 f"INTO TABLE {table_name}\n"
                 f"FIELDS TERMINATED BY ','\n"
                 f"ENCLOSED BY '\"'\n"
@@ -161,15 +162,15 @@ def generate_sql():
             #     add_set = True
             set_assignments = []
             if SPECIAL_COLUMN_B in original_columns:
-                set_assignments.append("    `geo` = SUBSTRING_INDEX(@messy_geo, ': ', 1)")
-                set_assignments.append("    `Geopolitical entity (reporting)` = SUBSTRING_INDEX(@messy_geo, ': ', -1)")
+                set_assignments.append(f"    `geo` = SUBSTRING_INDEX(@messy_{SPECIAL_COLUMN_B.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')}, ': ', 1)")
+                set_assignments.append(f"    `Geopolitical entity (reporting)` = SUBSTRING_INDEX(@messy_{SPECIAL_COLUMN_B.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')}, ': ', -1)")
                 cols_to_split_s.remove(SPECIAL_COLUMN_B)
             if SPECIAL_COLUMN_A in original_columns:
                 set_assignments.append("    `International Standard Classification of Education (ISCED 2011)` = SUBSTRING_INDEX(@messy_isced11, ': ', -1)")
                 cols_to_split_s.remove(SPECIAL_COLUMN_A)
 
             if set_assignments:
-                load_stmt += "\nSET\n" + ",\n".join(set_assignments)
+                load_stmt += "\nSET\n" + ",\n".join(set_assignments) +",\n"
             for col in list(cols_to_split_s):
               if col in original_columns:
                 clean_var = col.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')
@@ -177,30 +178,33 @@ def generate_sql():
                 dest_name = col.split(': ')[0]
                 load_stmt += f"    `{dest_name}` = SUBSTRING_INDEX({source_name}, ': ', 1),\n"
                 #temp_load_stmt
+
+            if set_assignments:
+              load_stmt = load_stmt[:-2] + ";\n"
+            else:
+              load_stmt = load_stmt[:-1] + ";\n"
             
             # if not add_set:
-            #     load_stmt += (
-            #         "    `region_type` = CASE \n"
-            #         "        WHEN CHAR_LENGTH(`geo`) = 2 THEN 'Country'\n"
-            #         "        WHEN CHAR_LENGTH(`geo`) = 3 THEN 'NUTS 1'\n"
-            #         "        WHEN CHAR_LENGTH(`geo`) = 4 THEN 'NUTS 2'\n"
-            #         "        WHEN CHAR_LENGTH(`geo`) = 5 THEN 'NUTS 3'\n"
-            #         "        ELSE 'Other'\n"
-            #         "    END,\n"
-            #     )
-            #     load_stmt += ";\n"
-            # else:
-            #     load_stmt += (
-            #         "    `region_type` = CASE \n"
-            #         "        WHEN CHAR_LENGTH(`geo`) = 2 THEN 'Country'\n"
-            #         "        WHEN CHAR_LENGTH(`geo`) = 3 THEN 'NUTS 1'\n"
-            #         "        WHEN CHAR_LENGTH(`geo`) = 4 THEN 'NUTS 2'\n"
-            #         "        WHEN CHAR_LENGTH(`geo`) = 5 THEN 'NUTS 3'\n"
-            #         "        ELSE 'Other'\n"
-            #         "    END,\n"
-            #     )
-            load_stmt += ";\n"
+
+            YEAR_MIN = 2019
+            YEAR_MAX = 2024
+            filter_timeperiod = (
+                f"DELETE FROM {table_name} WHERE TIME_PERIOD < {YEAR_MIN} OR TIME_PERIOD > {YEAR_MAX};"
+            )
+
             sql_statements.append(load_stmt)
+            sql_statements.append(filter_timeperiod)
+            sql_statements.append(f"ALTER TABLE {table_name} ADD COLUMN `region_type` VARCHAR(10);\n")
+            sql_statements.append(
+                f"UPDATE {table_name} SET"
+                "    `region_type` = CASE \n"
+                "        WHEN CHAR_LENGTH(`geo`) = 2 THEN 'Country'\n"
+                "        WHEN CHAR_LENGTH(`geo`) = 3 THEN 'NUTS 1'\n"
+                "        WHEN CHAR_LENGTH(`geo`) = 4 THEN 'NUTS 2'\n"
+                "        WHEN CHAR_LENGTH(`geo`) = 5 THEN 'NUTS 3'\n"
+                "        ELSE 'Other'\n"
+                "    END;\n"
+              )
             print(f"Processed: {filename}")
 
     # Write to the .sql file
@@ -208,6 +212,7 @@ def generate_sql():
         f.write("\n".join(sql_statements))
     
     print(f"\nSuccess! SQL script saved to: {output_sql_file}")
+    return True
 
 if __name__ == "__main__":
     generate_sql()
