@@ -187,7 +187,7 @@ def generate_sql() -> bool:
             # if not add_set:
 
             YEAR_MIN = 2019
-            YEAR_MAX = 2024
+            YEAR_MAX = 2021
             filter_timeperiod = (
                 f"DELETE FROM {table_name} WHERE TIME_PERIOD < {YEAR_MIN} OR TIME_PERIOD > {YEAR_MAX};"
             )
