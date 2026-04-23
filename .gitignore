@@ -2,3 +2,4 @@ Data
 .DS_Store
 .env
 __pycache__
+db_creation_eurostat.sql
