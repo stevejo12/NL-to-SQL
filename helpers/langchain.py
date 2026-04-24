@@ -14,13 +14,12 @@ from few_shots import few_shots
 
 def get_few_shot_db_chain():
   llm = ChatGoogleGenerativeAI(
-    model="gemini-3-flash-preview",
+    model="gemini-2.5-flash-lite",
     google_api_key=os.environ["GOOGLE_API_KEY"],
     temperature=0.2
   )
 
   load_dotenv()
-  # db_user = "root"
   db_user = os.getenv("DATABASE_USER")
   db_password = os.getenv("DATABASE_PASSWORD")  # safely encodes special characters
   db_host = os.getenv("DATABASE_HOST")

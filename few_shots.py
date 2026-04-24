@@ -69,17 +69,55 @@ few_shots = [
 
   # --- Population_by_Education (note: unit is PC = percent, age ranges are narrower) ---
   {
-    'Question': "What percentage of women aged 25-34 in Austria had tertiary education in 2021?",
-    'SQLQuery': "SELECT `OBS_VALUE` FROM Population_by_Education WHERE `geo` = 'AT' AND `TIME_PERIOD` = 2021 AND `region_type` = 'Country' AND `sex` = 'F' AND `age` = 'Y25-34' AND `International Standard Classification of Education (ISCED 2011)` = 'Tertiary education (levels 5-8)'",
+    'Question': "What percentage of women aged 25-34 in Austria had at most lower secondary education in 2021?",
+    'SQLQuery': "SELECT `OBS_VALUE` FROM Population_by_Education WHERE `geo` = 'AT' AND `TIME_PERIOD` = 2021 AND `region_type` = 'Country' AND `sex` = 'F' AND `age` = 'Y25-34' AND `International Standard Classification of Education (ISCED 2011)` = 'Less than primary, primary and lower secondary education (levels 0-2)'",
     'SQLResult': "Result of the SQL query",
-    'Answer': "Share of tertiary-educated women aged 25-34 (percent)"
+    'Answer': "Share of low-educated women aged 25-34 (percent)"
   },
   {
-    'Question': "Which Austrian NUTS 2 region had the highest share of tertiary-educated women aged 30-34 in 2021?",
-    'SQLQuery': "SELECT `geo`, `Geopolitical entity (reporting)`, `OBS_VALUE` FROM Population_by_Education WHERE `geo` LIKE 'AT%' AND `region_type` = 'NUTS 2' AND `TIME_PERIOD` = 2021 AND `sex` = 'F' AND `age` = 'Y30-34' AND `International Standard Classification of Education (ISCED 2011)` = 'Tertiary education (levels 5-8)' AND `OBS_VALUE` IS NOT NULL ORDER BY `OBS_VALUE` DESC LIMIT 1",
+    'Question': "What percentage of women aged 25-34 in Austria had tertiary education in 2021?",
+    'SQLQuery': 
+    """
+      SELECT high.`OBS_VALUE` - mid.`OBS_VALUE` AS tertiary_share_pct
+      FROM Population_by_Education high
+      JOIN Population_by_Education mid
+      ON high.`geo` = mid.`geo` AND high.`TIME_PERIOD` = mid.`TIME_PERIOD`
+      AND high.`sex` = mid.`sex` AND high.`age` = mid.`age`
+      AND high.`region_type` = mid.`region_type`
+      WHERE high.`geo` = 'AT' AND high.`TIME_PERIOD` = 2021
+      AND high.`region_type` = 'Country' AND high.`sex` = 'F' AND high.`age` = 'Y25-34'
+      AND high.`International Standard Classification of Education (ISCED 2011)` = 'Upper secondary, post-secondary non-tertiary and tertiary education (levels 3-8)'
+      AND mid.`International Standard Classification of Education (ISCED 2011)` = 'Upper secondary and post-secondary non-tertiary education (levels 3 and 4)'
+    """,
     'SQLResult': "Result of the SQL query",
-    'Answer': "Region with highest tertiary share"
+    'Answer': "Derived tertiary share for women aged 25-34 in Austria, 2021"
   },
+  {
+    'Question': "Compare vocational vs general upper-secondary education shares among women aged 25-34 in Austria in 2021.",
+    'SQLQuery': "SELECT `International Standard Classification of Education (ISCED 2011)`, `OBS_VALUE` FROM Population_by_Education WHERE `geo` = 'AT' AND `TIME_PERIOD` = 2021 AND `region_type` = 'Country' AND `sex` = 'F' AND `age` = 'Y25-34' AND `International Standard Classification of Education (ISCED 2011)` IN ('Upper secondary and post-secondary non-tertiary education - general (levels 34 and 44)', 'Upper secondary and post-secondary non-tertiary education - vocational (levels 35 and 45)')",
+    'SQLResult': "Result of the SQL query",
+    'Answer': "General vs vocational upper-secondary shares"
+  },
+  {
+    'Question': "Which Austrian NUTS 2 region had the highest share of women aged 30-34 with tertiary education in 2021?",
+    'SQLQuery': 
+    """
+      SELECT high.`geo`, high.`Geopolitical entity (reporting)`, high.`OBS_VALUE` - mid.`OBS_VALUE` AS tertiary_share_pct
+      FROM Population_by_Education high
+      JOIN Population_by_Education mid
+      ON high.`geo` = mid.`geo` AND high.`TIME_PERIOD` = mid.`TIME_PERIOD`
+      AND high.`sex` = mid.`sex` AND high.`age` = mid.`age`
+      AND high.`region_type` = mid.`region_type`
+      WHERE high.`geo` LIKE 'AT%' AND high.`TIME_PERIOD` = 2021
+      AND high.`region_type` = 'NUTS 2' AND high.`sex` = 'F' AND high.`age` = 'Y30-34'
+      AND high.`International Standard Classification of Education (ISCED 2011)` = 'Upper secondary, post-secondary non-tertiary and tertiary education (levels 3-8)'
+      AND mid.`International Standard Classification of Education (ISCED 2011)` = 'Upper secondary and post-secondary non-tertiary education (levels 3 and 4)'
+      AND high.`OBS_VALUE` IS NOT NULL AND mid.`OBS_VALUE` IS NOT NULL
+      ORDER BY tertiary_share_pct DESC LIMIT 1
+    """,
+    'SQLResult': "Result of the SQL query",
+    'Answer': "Region with highest derived tertiary share"
+    },
 
   # --- Cross-table join: productivity proxy ---
   {

@@ -1,5 +1,6 @@
 import streamlit as st
-from langchain_helper import get_few_shot_db_chain
+from helpers.langchain import get_few_shot_db_chain
+from helpers.visual import extract_sql_query, extract_sql_result, infer_column_names
 import pandas as pd
 import os
 import mysql.connector
@@ -79,31 +80,26 @@ if question:
 
   #visuals
   try:
-    sql_result=None
-    steps = response.get("intermediate_steps", [])
-    for step in steps:
-      if isinstance(step, dict) and "sql_result" in step:
-        sql_result = step["sql_result"]
-        break
-      # If it's the raw list of tuples/decimals
-      elif isinstance(step, list):
-        sql_result = step
-        break
-      # If it's a string representation, we need to handle the 'Decimal' type
-      elif isinstance(step, str) and "[" in step:
-        from decimal import Decimal
-        # eval() needs Decimal in the namespace to understand the SQLResult string
-        sql_result = eval(step)
-        break
-    
+    sql_result = extract_sql_result(response)
+    sql_query = extract_sql_query(response)
+
+    if sql_query:
+      with st.expander("Generated SQL"):
+        st.code(sql_query, language="sql")
+
     if sql_result:
-      st.header("Data Table:")
-      df = pd.DataFrame(sql_result)
+      n_cols = len(sql_result[0]) if sql_result and isinstance(sql_result[0], (tuple, list)) else 1
+      col_names = infer_column_names(sql_query, n_cols)
+      df = pd.DataFrame(sql_result, columns=col_names)
+
       if not df.empty:
+        st.header("Data Table:")
         st.dataframe(df)
-        
-        if len(df.columns) >= 2:
+
+        # Chart: need at least one numeric column beyond the first
+        numeric_cols = [c for c in df.columns[1:] if pd.api.types.is_numeric_dtype(df[c])]
+        if len(df) > 1 and numeric_cols:
           st.header("Visual Analysis:")
-          st.bar_chart(data=df, x=df.columns[0].astype(str), y=df.columns[1].astype(str))
+          st.bar_chart(df, x=df.columns[0], y=numeric_cols[0])
   except Exception as e:
-    st.info(f"Error  parsing table: {e}")
+    st.info(f"Error parsing table: {e}")
