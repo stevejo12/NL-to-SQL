@@ -2,6 +2,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
 import os
+from helpers.qdrant_store import build_qdrant_store
 from langchain_community.utilities import SQLDatabase
 from langchain_experimental.sql import SQLDatabaseChain
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -14,7 +15,7 @@ from few_shots import few_shots
 
 def get_few_shot_db_chain():
   llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-lite",
+    model="gemini-2.5-flash",
     google_api_key=os.environ["GOOGLE_API_KEY"],
     temperature=0.2
   )
@@ -34,10 +35,10 @@ def get_few_shot_db_chain():
   google_api_key=os.environ["GOOGLE_API_KEY"])
 
   to_vectorize = [" ".join(example.values()) for example in few_shots]
-  vectorstore = Chroma.from_texts(to_vectorize, embeddings, metadatas=few_shots)
+  vectorstore = build_qdrant_store(to_vectorize, embeddings, few_shots)
   example_selector = SemanticSimilarityExampleSelector(
     vectorstore=vectorstore,
-    k=2,
+    k=3,
   )
   
   example_prompt = PromptTemplate(
@@ -50,6 +51,14 @@ def get_few_shot_db_chain():
   Never query for all columns from a table. You must query only the columns that are needed to answer the question. Wrap each column name in backticks (`) to denote them as delimited identifiers.
   Pay attention to use only the column names you can see in the tables below. Be careful to not query for columns that do not exist. Also, pay attention to which column is in which table.
   Pay attention to use CURDATE() function to get the current date, if the question involves "today".
+
+  IMPORTANT NOTES FOR THE Population_by_Education TABLE:
+  - This table contains CUMULATIVE ISCED education categories, not disjoint ones.
+  - The row 'Tertiary education (levels 5-8)' DOES NOT EXIST in this table.
+  - To compute tertiary share, you MUST derive it as:
+      (levels 3-8) MINUS (levels 3 and 4)
+    using a self-join on Population_by_Education.
+  - See the example questions below for the exact pattern.
   
   Use the following format:
   
