@@ -1,13 +1,6 @@
 import os
 import pandas as pd
 
-#Todo: double column logic (detection and columns to drop),
-#  create region type column, 
-# dates to keep, 
-# logic for isced11 column, 
-# automatic database creation
-
-
 # Configuration
 data_folder = 'Data'
 output_sql_file = 'db_creation_eurostat.sql'
@@ -70,20 +63,20 @@ def generate_sql() -> bool:
             for col in original_columns:
                 if col in cols_to_split_s:
                     name1, name2 = col.split(': ')
-                split_cols = df_headers[col].astype(str).str.split(': ', expand=True, n=1)
-                if split_cols.shape[1] == 1:
-                    split_cols[1] = None
-                df_headers[[name1, name2]] = split_cols
-                df_headers = df_headers.drop(columns=[col])
-                if col == SPECIAL_COLUMN_A:
-                    columns_to_drop.add(name1)
-                elif col == SPECIAL_COLUMN_B:
-                    pass
-                else:
-                    columns_to_drop.add(name2)
+                    split_cols = df_headers[col].astype(str).str.split(': ', expand=True, n=1)
+                    if split_cols.shape[1] == 1:
+                        split_cols[1] = None
+                    df_headers[[name1, name2]] = split_cols
+                    df_headers = df_headers.drop(columns=[col])
+                    if col == SPECIAL_COLUMN_A:
+                        columns_to_drop.add(name1)
+                    elif col == SPECIAL_COLUMN_B:
+                        pass
+                    else:
+                        columns_to_drop.add(name2)
         
             # Start Building CREATE TABLE
-            create_stmt = f"CREATE TABLE IF NOT EXISTS {table_name} (\n"
+            create_stmt = f"DROP TABLE IF EXISTS {table_name};\nCREATE TABLE IF NOT EXISTS {table_name} (\n"
             col_defenitions = []
             df_headers = df_headers.drop(columns_to_drop, axis=1, errors='ignore')
             for col_name, dtype in df_headers.dtypes.items():
@@ -109,14 +102,13 @@ def generate_sql() -> bool:
             load_columns = []
             for col in original_columns:
                 if col in columns_to_drop:
-                    name = '@dummy'
-                    load_columns.append(f"{name}")
+                    load_columns.append("@dummy")
                 elif col in cols_to_split_s:
-                    clean_var = col.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')
-                if col == SPECIAL_COLUMN_A:
-                    clean_var = "isced11"
-                    name = f"@messy_{clean_var}"
-                    load_columns.append(name)
+                    if col == SPECIAL_COLUMN_A:
+                        clean_var = "isced11"
+                    else:
+                        clean_var = col.replace(': ', '_').replace(' ', '_').replace('(', '').replace(')', '')
+                    load_columns.append(f"@messy_{clean_var}")
                 else:
                     load_columns.append(f"`{col}`")
 
@@ -174,12 +166,12 @@ def generate_sql() -> bool:
             )
             print(f"Processed: {filename}")
 
-        # Write to the .sql file
-        with open(output_sql_file, 'w') as f:
-            f.write("\n".join(sql_statements))
+    # Write to the .sql file
+    with open(output_sql_file, 'w') as f:
+        f.write("\n".join(sql_statements))
         
-        print(f"\nSuccess! SQL script saved to: {output_sql_file}")
-        return True
+    print(f"\nSuccess! SQL script saved to: {output_sql_file}")
+    return True
 
 if __name__ == "__main__":
     generate_sql()
